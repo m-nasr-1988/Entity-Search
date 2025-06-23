@@ -42,8 +42,8 @@ def setup_driver():
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    return webdriver.Chrome(options=chrome_options)
+    chrome_options.binary_location = "/usr/bin/google-chrome"
+    return webdriver.Chrome(executable_path="/usr/local/bin/chromedriver", options=chrome_options)
 
 def main():
     st.set_page_config(page_title="CRO Entity Lookup")
