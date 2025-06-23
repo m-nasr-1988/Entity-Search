@@ -1,90 +1,67 @@
 import streamlit as st
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import time
 import pandas as pd
-import io
-import chromedriver_autoinstaller
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+import time
 
-# Auto-install matching chromedriver version
-chromedriver_autoinstaller.install()
-
-def get_entity_name(entity_number, driver):
-    try:
-        driver.get("https://core.cro.ie/search")
-
-        # Wait for the search field to appear
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "search-field"))
-        )
-
-        search_input = driver.find_element(By.ID, "search-field")
-        search_input.clear()
-        search_input.send_keys(entity_number)
-        search_input.send_keys(Keys.RETURN)
-
-        # Wait for results to load
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".result-body .company-name"))
-        )
-
-        name_element = driver.find_element(By.CSS_SELECTOR, ".result-body .company-name")
-        return name_element.text.strip()
-    except Exception:
-        return "N/A"
-
+# ---- Setup Headless Selenium Driver for Chromium on Streamlit Cloud ---- #
 def setup_driver():
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--no-sandbox")
     chrome_options.binary_location = "/usr/bin/chromium"
     return webdriver.Chrome(executable_path="/usr/bin/chromedriver", options=chrome_options)
 
-def main():
-    st.set_page_config(page_title="CRO Entity Lookup")
-    st.title("🔍 CRO Entity Number Lookup")
-    st.write("Enter entity numbers manually or upload a CSV file to fetch company names from [core.cro.ie](https://core.cro.ie/search).")
+# ---- Function to Fetch Entity Name ---- #
+def get_entity_name(entity_number):
+    driver = setup_driver()
+    try:
+        driver.get("https://core.cro.ie/search")
+        time.sleep(3)  # Let the page load
 
-    input_method = st.radio("Choose input method:", ("Manual Input", "Upload CSV"))
+        # Locate the input box
+        search_box = driver.find_element(By.ID, "mat-input-0")
+        search_box.clear()
+        search_box.send_keys(entity_number)
+        search_box.send_keys(Keys.RETURN)
+        time.sleep(5)  # Wait for results to load
 
-    entity_numbers = []
+        # Get entity name - you may need to adjust this selector
+        results = driver.find_elements(By.CLASS_NAME, "search-result-name")
 
-    if input_method == "Manual Input":
-        entity_input = st.text_area("Enter Entity Numbers (one per line)", height=200)
-        if entity_input:
-            entity_numbers = [line.strip() for line in entity_input.splitlines() if line.strip()]
+        if results:
+            entity_name = results[0].text.strip()
+        else:
+            entity_name = "N/A"
+    except Exception as e:
+        st.error(f"Error while fetching entity {entity_number}: {e}")
+        entity_name = "N/A"
+    finally:
+        driver.quit()
+
+    return entity_name
+
+# ---- Streamlit UI ---- #
+st.set_page_config(page_title="CRO Entity Search", layout="centered")
+st.title("🔎 CRO Entity Name Finder")
+st.markdown("Enter one or more entity numbers separated by commas. The app will return the matching entity names or `N/A`.")
+
+input_str = st.text_area("Enter Entity Numbers (comma-separated)", height=150)
+
+if st.button("Search"):
+    if input_str.strip():
+        entity_numbers = [e.strip() for e in input_str.split(",") if e.strip()]
+        result_data = []
+        with st.spinner("Searching CRO..."):
+            for entity in entity_numbers:
+                name = get_entity_name(entity)
+                result_data.append({"Entity Number": entity, "Entity Name": name})
+
+        df = pd.DataFrame(result_data)
+        st.success("Search complete.")
+        st.dataframe(df)
     else:
-        uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
-        if uploaded_file is not None:
-            df = pd.read_csv(uploaded_file)
-            entity_col = st.selectbox("Select column with entity numbers", df.columns)
-            entity_numbers = df[entity_col].dropna().astype(str).tolist()
-
-    if st.button("Search") and entity_numbers:
-        st.info(f"Processing {len(entity_numbers)} entity number(s)...")
-        with st.spinner("Searching the CRO site..."):
-            driver = setup_driver()
-            results = []
-            for number in entity_numbers:
-                name = get_entity_name(number, driver)
-                results.append({"Entity Number": number, "Entity Name": name})
-            driver.quit()
-
-        results_df = pd.DataFrame(results)
-        st.success("Search completed!")
-        st.subheader("📋 Results")
-        st.dataframe(results_df)
-
-        # CSV download
-        csv = results_df.to_csv(index=False).encode("utf-8")
-        st.download_button("📥 Download Results as CSV", csv, "entity_results.csv", "text/csv")
-    elif st.button("Search") and not entity_numbers:
-        st.warning("Please provide at least one entity number.")
-
-if __name__ == "__main__":
-    main()
+        st.warning("Please enter at least one entity number.")
