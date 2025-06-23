@@ -1,60 +1,50 @@
 import streamlit as st
-import pandas as pd
 import requests
+import base64
 
-API_URL = "https://services.cro.ie/cws/companies"
+st.title("CRO Entity Name Finder")
 
-def lookup_entity(entity_number: str) -> str:
-    """
-    Query CRO Open Services for a single company number.
-    Returns the company/business name or 'N/A'.
-    """
-    params = {
-        "company_num": entity_number,
-        "company_bus_ind": "E",      # C = companies, B = business names, E = either
-        "max": 1,                    # only need the first (exact) match
-        "format": "json"
-    }
-    try:
-        resp = requests.get(API_URL, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()           # returns a list of Company objects
-        if data:
-            return data[0].get("company_name", "N/A")
-    except Exception as e:
-        st.warning(f"{entity_number}: {e}")
-    return "N/A"
+# Instructions
+st.markdown("Enter one or more entity numbers (comma-separated).")
 
-# ───────────────────────────── Streamlit UI ───────────────────────────── #
-st.set_page_config(page_title="CRO Entity Lookup")
-st.title("🔎 CRO Entity Number → Name")
+# Input box
+input_text = st.text_area("Entity Numbers", "691054, 602047")
 
-st.markdown(
-    "Paste **one or many** CRO entity numbers. "
-    "Separate them with commas, spaces, or new lines."
-)
-
-raw_input = st.text_area("Entity numbers", height=160)
-
+# Button
 if st.button("Search"):
-    # normalise separators → commas, then split & dedupe
-    numbers = {
-        n.strip()
-        for n in raw_input.replace("\n", ",").replace(" ", ",").split(",")
-        if n.strip()
-    }
-
-    if not numbers:
-        st.error("Please enter at least one entity number.")
+    if input_text.strip() == "":
+        st.warning("Please enter at least one entity number.")
     else:
-        with st.spinner("Contacting CRO…"):
-            results = [{"Entity Number": n, "Entity Name": lookup_entity(n)}
-                       for n in sorted(numbers)]
+        entity_numbers = [num.strip() for num in input_text.split(",") if num.strip()]
+        
+        # Read credentials from Streamlit secrets
+        email = st.secrets["CRO_API"]["email"]
+        api_key = st.secrets["CRO_API"]["api_key"]
 
-        df = pd.DataFrame(results)
-        st.success("Done!")
-        st.dataframe(df, use_container_width=True)
+        # Create Basic Auth header
+        token = base64.b64encode(f"{email}:{api_key}".encode()).decode()
+        headers = {"Authorization": f"Basic {token}"}
 
-        # download button
-        csv = df.to_csv(index=False).encode()
-        st.download_button("📥 Download CSV", csv, "cro_entities.csv", "text/csv")
+        results = {}
+
+        for number in entity_numbers:
+            try:
+                params = {
+                    "company_num": number,
+                    "company_bus_ind": "E",
+                    "max": 1,
+                    "format": "json"
+                }
+                url = "https://services.cro.ie/cws/companies"
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                response.raise_for_status()
+
+                data = response.json()
+                name = data[0]["company_name"] if data else "N/A"
+                results[number] = name
+            except Exception as e:
+                results[number] = f"Error: {e}"
+
+        st.subheader("Results")
+        for number, name in results.items():
+            st.write(f"**{number}**: {name}")
