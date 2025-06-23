@@ -6,3 +6,5 @@ libgconf-2-4
 libfontconfig1
 libxss1
 google-chrome-stable
+chromium
+chromium-driver
