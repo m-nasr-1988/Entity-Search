@@ -4,16 +4,20 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.service import Service
 import time
 
 # ---- Setup Headless Selenium Driver for Chromium on Streamlit Cloud ---- #
 def setup_driver():
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.binary_location = "/usr/bin/chromium"
-    return webdriver.Chrome(executable_path="/usr/bin/chromedriver", options=chrome_options)
+
+    # Use Service object instead of deprecated executable_path
+    service = Service(executable_path="/usr/bin/chromedriver")
+    return webdriver.Chrome(service=service, options=chrome_options)
 
 # ---- Function to Fetch Entity Name ---- #
 def get_entity_name(entity_number):
