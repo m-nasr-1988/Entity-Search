@@ -1,70 +1,60 @@
 import streamlit as st
 import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import time
+import requests
 
-# Setup WebDriver
-def setup_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.binary_location = "/usr/bin/chromium"
-    service = Service(executable_path="/usr/bin/chromedriver")
-    return webdriver.Chrome(service=service, options=chrome_options)
+API_URL = "https://services.cro.ie/cws/companies"
 
-# Function to fetch entity name from CRO
-def get_entity_name(entity_number):
-    driver = setup_driver()
+def lookup_entity(entity_number: str) -> str:
+    """
+    Query CRO Open Services for a single company number.
+    Returns the company/business name or 'N/A'.
+    """
+    params = {
+        "company_num": entity_number,
+        "company_bus_ind": "E",      # C = companies, B = business names, E = either
+        "max": 1,                    # only need the first (exact) match
+        "format": "json"
+    }
     try:
-        driver.get("https://core.cro.ie/search")
-
-        # Wait for the input field to load
-        search_box = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, '//input[@placeholder="Search for a company or business name"]'))
-        )
-        search_box.clear()
-        search_box.send_keys(entity_number)
-        search_box.send_keys(Keys.RETURN)
-
-        # Wait for results to load
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "search-result-name"))
-        )
-        results = driver.find_elements(By.CLASS_NAME, "search-result-name")
-        entity_name = results[0].text.strip() if results else "N/A"
-
+        resp = requests.get(API_URL, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()           # returns a list of Company objects
+        if data:
+            return data[0].get("company_name", "N/A")
     except Exception as e:
-        st.warning(f"Error while fetching entity {entity_number}: {e}")
-        entity_name = "N/A"
-    finally:
-        driver.quit()
-    return entity_name
+        st.warning(f"{entity_number}: {e}")
+    return "N/A"
 
-# Streamlit UI
-st.title("CRO Entity Number Lookup")
-st.markdown("Enter CRO entity numbers (comma-separated or newline-separated) below.")
+# ───────────────────────────── Streamlit UI ───────────────────────────── #
+st.set_page_config(page_title="CRO Entity Lookup")
+st.title("🔎 CRO Entity Number → Name")
 
-input_str = st.text_area("Enter Entity Numbers", height=150)
+st.markdown(
+    "Paste **one or many** CRO entity numbers. "
+    "Separate them with commas, spaces, or new lines."
+)
+
+raw_input = st.text_area("Entity numbers", height=160)
 
 if st.button("Search"):
-    if input_str.strip():
-        entity_numbers = [e.strip() for e in input_str.replace('\n', ',').split(',') if e.strip()]
-        results = []
+    # normalise separators → commas, then split & dedupe
+    numbers = {
+        n.strip()
+        for n in raw_input.replace("\n", ",").replace(" ", ",").split(",")
+        if n.strip()
+    }
 
-        with st.spinner("Searching..."):
-            for entity in entity_numbers:
-                name = get_entity_name(entity)
-                results.append({"Entity Number": entity, "Entity Name": name})
-        
-        df = pd.DataFrame(results)
-        st.success("Search completed.")
-        st.dataframe(df, use_container_width=True)
-    else:
+    if not numbers:
         st.error("Please enter at least one entity number.")
+    else:
+        with st.spinner("Contacting CRO…"):
+            results = [{"Entity Number": n, "Entity Name": lookup_entity(n)}
+                       for n in sorted(numbers)]
+
+        df = pd.DataFrame(results)
+        st.success("Done!")
+        st.dataframe(df, use_container_width=True)
+
+        # download button
+        csv = df.to_csv(index=False).encode()
+        st.download_button("📥 Download CSV", csv, "cro_entities.csv", "text/csv")
