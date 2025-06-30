@@ -2,49 +2,51 @@ import streamlit as st
 import requests
 import base64
 
-st.title("CRO Entity Name Finder")
+st.title("CRO Entity Number Lookup")
 
-# Instructions
-st.markdown("Enter one or more entity numbers (comma-separated).")
+st.write("Enter CRO entity numbers separated by commas or new lines.")
 
-# Input box
-input_text = st.text_area("Entity Numbers", "691054, 602047")
+entity_input = st.text_area("Entity Numbers", height=150, placeholder="E.g. 691054, 123456")
 
-# Button
 if st.button("Search"):
-    if input_text.strip() == "":
+    if not entity_input.strip():
         st.warning("Please enter at least one entity number.")
     else:
-        entity_numbers = [num.strip() for num in input_text.split(",") if num.strip()]
+        # Parse input into list of entity numbers
+        entities = [e.strip() for e in entity_input.replace(",", "\n").split("\n") if e.strip()]
         
-        # Read credentials from Streamlit secrets
-        email = st.secrets["CRO_API"]["email"]
-        api_key = st.secrets["CRO_API"]["api_key"]
+        # Load credentials from secrets.toml
+        try:
+            email = st.secrets["CRO_API"]["email"]
+            api_key = st.secrets["CRO_API"]["api_key"]
+        except KeyError:
+            st.error("Missing API credentials in secrets.toml file.")
+            st.stop()
 
-        # Create Basic Auth header
-        token = base64.b64encode(f"{email}:{api_key}".encode()).decode()
-        headers = {"Authorization": f"Basic {token}"}
+        # Encode email:api_key in base64 for Authorization header
+        credentials = f"{email}:{api_key}"
+        encoded_credentials = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
+        headers = {
+            "Authorization": f"Basic {encoded_credentials}"
+        }
 
         results = {}
 
-        for number in entity_numbers:
+        for entity in entities:
             try:
-                params = {
-                    "company_num": number,
-                    "company_bus_ind": "E",
-                    "max": 1,
-                    "format": "json"
-                }
-                url = "https://services.cro.ie/cws/companies"
-                response = requests.get(url, headers=headers, params=params, timeout=10)
-                response.raise_for_status()
-
-                data = response.json()
-                name = data[0]["company_name"] if data else "N/A"
-                results[number] = name
+                url = f"https://services.cro.ie/cws/companies?company_num={entity}&company_bus_ind=E&max=1&format=json"
+                response = requests.get(url, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data and isinstance(data, list) and "CompanyName" in data[0]:
+                        results[entity] = data[0]["CompanyName"]
+                    else:
+                        results[entity] = "N/A"
+                else:
+                    results[entity] = f"Error: {response.status_code} — {response.reason}"
             except Exception as e:
-                results[number] = f"Error: {e}"
+                results[entity] = f"Exception: {e}"
 
         st.subheader("Results")
-        for number, name in results.items():
-            st.write(f"**{number}**: {name}")
+        for entity, name in results.items():
+            st.write(f"**{entity}**: {name}")
