@@ -27,7 +27,7 @@ else:
         else:
             entities = df_uploaded['registration_number'].astype(str).tolist()
 
-if st.button("Search") and entities:
+if st.button("Search", key="search_button_1") and entities:
     try:
         email = st.secrets["CRO_API"]["email"]
         api_key = st.secrets["CRO_API"]["api_key"]
@@ -76,5 +76,5 @@ if st.button("Search") and entities:
         mime="text/csv"
     )
 
-elif st.button("Search"):
+elif st.button("Search", key="search_button_2"):
     st.warning("Please enter or upload at least one entity number.")
