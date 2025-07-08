@@ -48,7 +48,7 @@ if st.button("Search", key="main_search_button") and entity_numbers:
                     data = response.json()
                     if data:
                         for d in data:
-                            id d.get("company_bus_ind") != ind_type:
+                            if d.get("company_bus_ind") != ind_type:
                                 continue
                             address = ", ".join(filter(None, [d.get(f"company_addr_{i}", "") for i in range(1, 5)]))
                             result_data.append({
