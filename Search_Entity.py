@@ -38,8 +38,8 @@ if st.button("Search"):
                 response = requests.get(url, headers=headers, timeout=10)
                 if response.status_code == 200:
                     data = response.json()
-                    if data and isinstance(data, list) and "CompanyName" in data[0]:
-                        results[entity] = data[0]["CompanyName"]
+                    if data and isinstance(data, list) and "company_name" in data[0]:
+                        results[entity] = data[0]["company_name"]
                     else:
                         results[entity] = "N/A"
                 else:
