@@ -71,10 +71,9 @@ if st.button("Search", key="main_search_button") and entity_numbers:
     status_text.empty()
 
     df_result = pd.DataFrame(result_data)
-    df_result = df_result.reset_index(drop=True)  # Remove old index
     df_result.insert(0, "No.", range(1, len(df_result) + 1))  # Add new numbered column
     st.subheader("Results")
-    st.dataframe(df_result)
+    st.dataframe(df_result, use_container_width=True, hide_index=True)
 
     csv = df_result.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download CSV", csv, file_name="cro_entity_results.csv", mime="text/csv")
