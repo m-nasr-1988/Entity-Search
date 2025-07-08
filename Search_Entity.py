@@ -71,7 +71,6 @@ if st.button("Search", key="main_search_button") and entity_numbers:
     status_text.empty()
 
     df_result = pd.DataFrame(result_data)
-    df_result.index = df_result.index + 1  # Start numbering from 1
     st.subheader("Results")
     st.dataframe(df_result)
 
